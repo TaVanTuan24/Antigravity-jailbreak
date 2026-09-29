@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "codebase-memory-mcp": {
+      "command": "C:/Users/tavan/.local/bin/codebase-memory-mcp.exe"
+    },
+    "nerv-tools": {
+      "command": "python",
+      "args": [
+        "-u",
+        "d:/Antigravity-project/mcp_server.py",
+        "--backend",
+        "wsl",
+        "--profile",
+        "safe",
+        "--wsl-distro",
+        "kali-linux"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

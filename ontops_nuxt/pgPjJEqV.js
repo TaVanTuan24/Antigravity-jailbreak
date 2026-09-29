@@ -1,0 +1,1 @@
+import{_ as t}from"./DlAUqK2U.js";import{o,c as s,r as n}from"./B8rZ9i5G.js";const r={},c={class:"min-h-dvh bg-page font-sans text-zinc-900"};function a(e,_){return o(),s("div",c,[n(e.$slots,"default")])}const i=t(r,[["render",a]]);export{i as default};
