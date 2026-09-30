@@ -392,6 +392,7 @@ async function bypass(inputUrlOrToken) {
   });
   const visitData = await visitRes.json();
   if (visitData.visitTicket) visitTicket = visitData.visitTicket;
+  if (visitData.token) trafficSessionToken = visitData.token;
 
   const waitTime = waitSeconds + 5;
   console.log(`[*] Waiting for server countdown (${waitTime}s)...`);
@@ -404,42 +405,58 @@ async function bypass(inputUrlOrToken) {
   // Step 5: Solve QCaptcha for target site and get code
   console.log('\n[5/6] Solving QCaptcha on target domain to retrieve verification code...');
 
-  // 5a. Fetch fresh captcha nonce/action
-  let captchaAction = camp.captchaNonceAction || null;
-  try {
-    const nonceRes = await fetch('https://api.layma.net/api/traffic/captcha-nonce', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'User-Agent': UA,
-        'Origin': `https://${targetDomain}`,
-        'Referer': visitReferrer,
-        'X-Traffic-Session': widgetSessionToken
-      },
-      body: JSON.stringify({
-        trafficSessionToken: trafficSessionToken,
-        trafficId: trafficId
-      })
-    });
-    const nonceData = await nonceRes.json();
-    if (nonceData && nonceData.action) {
-      captchaAction = nonceData.action;
-      console.log('[+] Acquired captcha action nonce:', captchaAction);
+  // 5a. Fetch fresh captcha nonce/action with polling
+  let captchaAction = null;
+  for (let ret = 0; ret < 10; ret++) {
+    try {
+      const nonceRes = await fetch('https://api.layma.net/api/traffic/captcha-nonce', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'User-Agent': UA,
+          'Origin': `https://${targetDomain}`,
+          'Referer': visitReferrer,
+          'X-Traffic-Session': widgetSessionToken
+        },
+        body: JSON.stringify({
+          trafficSessionToken: trafficSessionToken,
+          trafficId: trafficId
+        })
+      });
+      const rawText = await nonceRes.text();
+      try {
+        const nonceData = JSON.parse(rawText);
+        if (nonceData && nonceData.action) {
+          captchaAction = nonceData.action;
+          console.log('[+] Acquired captcha action nonce:', captchaAction);
+          break;
+        }
+      } catch (parseErr) {
+        console.log(`[*] Nonce status ${nonceRes.status} (${rawText.trim()}), waiting 3s before retry...`);
+      }
+    } catch (e) {
+      console.log('[!] Warning: fetch error on captcha-nonce:', e.message);
     }
-  } catch (e) {
-    console.log('[!] Warning: could not fetch captcha-nonce, using fallback action:', e.message);
+    await sleep(3000);
+  }
+
+  if (!captchaAction && camp.captchaNonceAction) {
+    console.log('[!] Using campaign initial captchaNonceAction as fallback');
+    captchaAction = camp.captchaNonceAction;
   }
 
   const targetQCaptchaToken = await solveQCaptcha(targetSitekey, `https://${targetDomain}`, captchaAction);
 
-  // 5b. Submit getcode with automatic 401 retry
+  // 5b. Submit getcode
   const bodyReferrer = chosenFlatform === 'google'
     ? 'https://www.google.com/'
     : (chosenFlatform === 'facebook' ? 'https://fbclid.facebook.com' : '');
 
   let getCodeData = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    console.log(`[*] Submitting getcode (attempt ${attempt + 1})...`);
+  const solutionsToTry = [String(chosenSolution), '0', '1'].filter((v, i, a) => a.indexOf(v) === i);
+
+  for (const sol of solutionsToTry) {
+    console.log(`[*] Submitting getcode with solution="${sol}"...`);
     const getCodeRes = await fetch('https://api.layma.net/api/traffic/getcode', {
       method: 'POST',
       headers: {
@@ -462,7 +479,7 @@ async function bypass(inputUrlOrToken) {
         referrer: bodyReferrer,
         trafficId: trafficId,
         trafficSessionToken: trafficSessionToken,
-        solution: String(chosenSolution),
+        solution: sol,
         qCaptchaToken: targetQCaptchaToken
       })
     });
@@ -474,27 +491,10 @@ async function bypass(inputUrlOrToken) {
         getCodeData = parsed;
         break;
       } else {
-        console.log(`[!] GetCode returned:`, rawText);
+        console.log(`[!] GetCode (sol ${sol}) returned:`, rawText);
       }
     } catch (e) {
-      if (getCodeRes.status === 401 && attempt === 0) {
-        console.log('[!] 401 on getcode, re-authenticating widget session and retrying...');
-        const retrySess = await fetch('https://api.layma.net/api/traffic/session', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'User-Agent': UA,
-            'Origin': `https://${targetDomain}`,
-            'Referer': `https://${targetDomain}/`
-          },
-          body: JSON.stringify({ keyToken })
-        });
-        const retrySessData = await retrySess.json();
-        widgetSessionToken = retrySessData.sessionToken || retrySessData.SessionToken;
-        console.log('[+] Refreshed widget session token:', widgetSessionToken);
-        continue;
-      }
-      throw new Error(`Failed to getcode (${getCodeRes.status}): ${rawText}`);
+      console.log(`[!] GetCode (sol ${sol}) parse error: ${rawText}`);
     }
   }
 
