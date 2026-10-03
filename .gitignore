@@ -16,3 +16,7 @@ core.*
 
 # Downloaded tools and vendored Python packages
 tools/bin/
+
+# CTF workspace (excluded from repo)
+CTF/
+Temp/
