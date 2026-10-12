@@ -9,5 +9,5 @@ set NODE_TLS_REJECT_UNAUTHORIZED=0
 set NODE_OPTIONS=--use-system-ca
 echo [NERV-BREAK] HTTPS_PROXY=%HTTPS_PROXY%
 echo [NERV-BREAK] Starting Antigravity IDE with MITM routing...
-start "" "C:\Users\tavan\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe"
+start "" "C:\Users\tavan\AppData\Local\Programs\antigravity\Antigravity.exe"
 endlocal
